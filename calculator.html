@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>収率計算ツール</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        /* 横並び用のコンテナ設定 */
+        .main-container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1050px;
+            align-items: flex-start;
+        }
+        /* 画面幅が狭い場合（スマホ等）は縦並びにする */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+        .calculator-card, .log-card {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            flex: 1; /* 横幅を均等に分割 */
+            width: 100%;
+            box-sizing: border-box;
+        }
+        h1, h2 {
+            font-size: 1.5rem;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        h2 { font-size: 1.2rem; }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        input[type="number"]:focus, input[type="text"]:focus {
+            border-color: #3498db;
+            outline: none;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+        }
+        .result-area {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #e8f6f3;
+            border-left: 5px solid #1abc9c;
+            border-radius: 5px;
+        }
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+        .result-item:last-child {
+            margin-bottom: 0;
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #16a085;
+        }
+        .unit {
+            font-size: 0.8em;
+            color: #666;
+            margin-left: 2px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-record {
+            background-color: #3498db;
+            color: white;
+        }
+        .btn-record:hover { background-color: #2980b9; }
+        .btn-reset {
+            background-color: #ecf0f1;
+            color: #333;
+        }
+        .btn-reset:hover { background-color: #bdc3c7; }
+        
+        /* 履歴テーブルのスタイル */
+        .table-wrapper {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            text-align: right; /* 数値が見やすいように右寄せ */
+        }
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            vertical-align: middle;
+        }
+        th {
+            background-color: #f8f9fa;
+            color: #333;
+            text-align: center; /* ヘッダーは中央揃え */
+            white-space: nowrap;
+        }
+        /* 文字列の列は左寄せ */
+        .text-left { text-align: left; }
+        .empty-log {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            padding: 20px 0;
+        }
+        
+        /* 行削除ボタンのスタイル */
+        .btn-delete-row {
+            background-color: #e74c3c;
+            color: white;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            border-radius: 3px;
+            flex: none;
+            width: auto;
+        }
+        .btn-delete-row:hover { background-color: #c0392b; }
+        .action-cell {
+            text-align: center;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <div class="calculator-card">
+        <h1>収率計算ツール</h1>
+
+        <div class="input-group">
+            <label for="exp-number">実験番号</label>
+            <input type="text" id="exp-number">
+        </div>
+
+        <div class="input-group">
+            <label for="molecule-name">分子の名前</label>
+            <input type="text" id="molecule-name">
+        </div>
+
+        <div class="input-group">
+            <label for="reactant-mw">原料の分子量</label>
+            <input type="number" id="reactant-mw" step="any" oninput="calculate()">
+        </div>
+
+        <div class="input-group">
+            <label for="reactant-amount">原料の投入量 <span class="unit">(mg)</span></label>
+            <input type="number" id="reactant-amount" step="any" oninput="calculate()">
+        </div>
+
+        <div class="input-group">
+            <label for="actual-yield">得られた目的物の収量 <span class="unit">(mg)</span></label>
+            <input type="number" id="actual-yield" step="any" oninput="calculate()">
+        </div>
+
+        <div class="result-area">
+            <div class="result-item">
+                <span>目的物の分子量:</span>
+                <span id="product-mw">-</span>
+            </div>
+            <div class="result-item">
+                <span>理論収量:</span>
+                <span id="theoretical-yield">- mg</span>
+            </div>
+            <div class="result-item">
+                <span>収率:</span>
+                <span id="yield-percentage">- %</span>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-reset" onclick="resetForm()">リセット</button>
+            <button class="btn-record" onclick="recordLog()">記録する</button>
+        </div>
+    </div>
+
+    <div class="log-card">
+        <h2>過去の記録</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="text-left">実験番号</th>
+                        <th class="text-left">分子名</th>
+                        <th>原料(mg)</th>
+                        <th>収量(mg)</th>
+                        <th>収率(%)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="log-table-body">
+                    </tbody>
+            </table>
+            <div id="empty-message" class="empty-log">記録はまだありません</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.onload = function() {
+        displayLogs();
+    };
+
+    function calculate() {
+        const reactantMw = parseFloat(document.getElementById('reactant-mw').value);
+        const reactantAmount = parseFloat(document.getElementById('reactant-amount').value);
+        const actualYield = parseFloat(document.getElementById('actual-yield').value);
+
+        const additionMw = 253.94;
+
+        if (!isNaN(reactantMw) && reactantMw > 0) {
+            const productMw = reactantMw + additionMw;
+            document.getElementById('product-mw').textContent = productMw.toFixed(2);
+
+            if (!isNaN(reactantAmount) && reactantAmount > 0) {
+                const mmoles = reactantAmount / reactantMw;
+                const theoreticalYield = mmoles * productMw;
+                document.getElementById('theoretical-yield').textContent = theoreticalYield.toFixed(1) + " mg";
+
+                if (!isNaN(actualYield) && actualYield >= 0) {
+                    const yieldPercentage = (actualYield / theoreticalYield) * 100;
+                    document.getElementById('yield-percentage').textContent = yieldPercentage.toFixed(1) + " %";
+                    return { productMw, theoreticalYield, yieldPercentage }; 
+                }
+            }
+        }
+        
+        if (isNaN(reactantMw) || reactantMw <= 0) document.getElementById('product-mw').textContent = "-";
+        if (isNaN(reactantAmount) || reactantAmount <= 0) document.getElementById('theoretical-yield').textContent = "- mg";
+        if (isNaN(actualYield) || actualYield < 0) document.getElementById('yield-percentage').textContent = "- %";
+        
+        return null;
+    }
+
+    function resetForm() {
+        document.getElementById('exp-number').value = '';
+        document.getElementById('molecule-name').value = '';
+        document.getElementById('reactant-mw').value = '';
+        document.getElementById('reactant-amount').value = '';
+        document.getElementById('actual-yield').value = '';
+        calculate(); 
+    }
+
+    function recordLog() {
+        const expNumber = document.getElementById('exp-number').value;
+        const moleculeName = document.getElementById('molecule-name').value;
+        const reactantAmount = document.getElementById('reactant-amount').value;
+        const actualYield = document.getElementById('actual-yield').value;
+        const calcResults = calculate();
+
+        if (!calcResults) {
+            alert("原料の分子量、投入量、目的物の収量を正しく入力してください。");
+            return;
+        }
+
+        const logData = {
+            exp: expNumber || '-',
+            molecule: moleculeName || '-',
+            amount: parseFloat(reactantAmount).toFixed(1),
+            yield: parseFloat(actualYield).toFixed(1),
+            percent: calcResults.yieldPercentage.toFixed(1)
+        };
+
+        let logs = JSON.parse(localStorage.getItem('yieldLogs')) || [];
+        logs.unshift(logData);
+        if (logs.length > 50) logs.pop();
+        localStorage.setItem('yieldLogs', JSON.stringify(logs));
+
+        displayLogs();
+    }
+
+    function displayLogs() {
+        const tbody = document.getElementById('log-table-body');
+        const emptyMessage = document.getElementById('empty-message');
+        let logs = JSON.parse(localStorage.getItem('yieldLogs')) || [];
+
+        tbody.innerHTML = ''; 
+
+        if (logs.length === 0) {
+            emptyMessage.style.display = 'block';
+        } else {
+            emptyMessage.style.display = 'none';
+
+            logs.forEach((log, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-left">${log.exp}</td>
+                    <td class="text-left">${log.molecule}</td>
+                    <td>${log.amount}</td>
+                    <td>${log.yield}</td>
+                    <td><strong>${log.percent}</strong></td>
+                    <td class="action-cell">
+                        <button class="btn-delete-row" onclick="deleteRow(${index})">削除</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    }
+
+    // 指定した行の記録だけを削除する関数
+    function deleteRow(index) {
+        if (confirm("この記録を削除してもよろしいですか？")) {
+            let logs = JSON.parse(localStorage.getItem('yieldLogs')) || [];
+            logs.splice(index, 1); // 選んだインデックスの要素を1つ削除
+            localStorage.setItem('yieldLogs', JSON.stringify(logs));
+            displayLogs(); // 表示を更新
+        }
+    }
+</script>
+
+</body>
+</html>
