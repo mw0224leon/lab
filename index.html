@@ -41,14 +41,26 @@
     const btnEstimate = document.getElementById('btnEstimate');
     const btnOrder = document.getElementById('btnOrder');
 
+    // Excelのコピペによる不要なダブルクォーテーションを綺麗にする関数
+    function getCleanText() {
+        let text = csvInput.value.trim();
+        // 最初と最後がダブルクォーテーションで囲まれている場合
+        if (text.startsWith('"') && text.endsWith('"')) {
+            // 前後の " を削除
+            text = text.slice(1, -1);
+            // エスケープされた "" を " に戻す
+            text = text.replace(/""/g, '"');
+        }
+        return text.trim();
+    }
+
     // 状態監視
     csvInput.addEventListener('input', () => {
-        const text = csvInput.value.trim();
+        const text = getCleanText();
         const lines = text.split('\n');
         
         resetUI();
 
-        // 最低3行ないと処理しない
         if (lines.length < 3 || !text) {
             return;
         }
@@ -57,13 +69,11 @@
         const firstDataLine = lines[2];
         const commaCount = (firstDataLine.match(/,/g) || []).length;
 
-        // データのカンマ数チェック（ユーザーには内部ロジックを見せない）
         if (commaCount !== 7) {
             errorArea.textContent = "適切なフォーマットではありません";
             return;
         }
 
-        // 1行目のテキストで厳密判定（完全一致）
         if (typeIndicator === '見積もり') {
             btnEstimate.classList.add('active-estimate');
         } else if (typeIndicator === '発注') {
@@ -89,9 +99,10 @@
 
     async function generateExcel(type) {
         const templateFile = type === 'estimate' ? 'estimate_template.xlsx' : 'order_template.xlsx';
-        const lines = csvInput.value.trim().split('\n');
+        // ここでもクリーンアップしたテキストを使用する
+        const text = getCleanText();
+        const lines = text.split('\n');
         
-        // データの抽出
         const addressee = lines[1].trim();
         const data = lines.slice(2).map(row => row.split(','));
         const dateStr = getFormattedDate();
@@ -105,19 +116,15 @@
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
 
-            // セルへの書き込み
             XLSX.utils.sheet_add_aoa(worksheet, [[addressee]], { origin: "E1" });
             XLSX.utils.sheet_add_aoa(worksheet, [[dateStr]], { origin: "E2" });
             XLSX.utils.sheet_add_aoa(worksheet, data, { origin: "A6" });
 
-            // ファイル名の決定
             const contentName = (type === 'estimate') ? 'お見積もり依頼' : '発注依頼';
             const fileName = `十條合成様_${contentName}_${dateStr}.xlsx`;
 
-            // ダウンロード実行
             XLSX.writeFile(workbook, fileName);
 
-            // 後処理
             csvInput.value = "";
             resetUI();
             alert(`ファイル「${fileName}」を生成しました。`);
