@@ -13,8 +13,6 @@
         .controls { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
         button { padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.3s; font-size: 0.9rem; color: white; background-color: #bdc3c7; pointer-events: none; }
         
-        /* ボタン有効時の色 */
-        button.active-estimate { background-color: #27ae60; pointer-events: auto; }
         button.active-order { background-color: #2980b9; pointer-events: auto; }
         button:hover { opacity: 0.8; }
         
@@ -27,13 +25,13 @@
 <div class="container">
     <h1>Excelデータ出力ツール</h1>
     <p class="info-text">
-        所定のフォーマットのデータを貼り付けてください。
+        所定のフォーマットのデータを貼り付けてください。<br>
+        （1行目：宛名、2行目：業者名、3行目以降：データ）
     </p>
     <textarea id="csvInput" placeholder="データをここに貼り付け..."></textarea>
     <div id="errorArea" class="error-msg"></div>
 
     <div class="controls">
-        <button id="btnEstimate">見積もり依頼用Excel生成</button>
         <button id="btnOrder">発注用Excel生成</button>
     </div>
 </div>
@@ -41,60 +39,45 @@
 <script>
     const csvInput = document.getElementById('csvInput');
     const errorArea = document.getElementById('errorArea');
-    const btnEstimate = document.getElementById('btnEstimate');
     const btnOrder = document.getElementById('btnOrder');
 
-    // Excelのコピペによる不要なダブルクォーテーションを綺麗にする関数
     function getCleanText() {
         let text = csvInput.value.trim();
-        // 最初と最後がダブルクォーテーションで囲まれている場合
         if (text.startsWith('"') && text.endsWith('"')) {
             text = text.slice(1, -1);
-            // エスケープされた "" を " に戻す
             text = text.replace(/""/g, '"');
         }
         return text.trim();
     }
 
-    // 状態監視（リアルタイムバリデーション）
     csvInput.addEventListener('input', () => {
         const text = getCleanText();
         const lines = text.split('\n');
         
         resetUI();
 
-        // 最低3行（種別、宛名、データ）ないと処理しない
+        // 3行（宛名、業者名、データ）必要
         if (lines.length < 3 || !text) {
             return;
         }
 
-        const typeIndicator = lines[0].trim();
-        const firstDataLine = lines[2];
+        const firstDataLine = lines[2]; // 3行目がデータの1行目
         const commaCount = (firstDataLine.match(/,/g) || []).length;
 
-        // データ行のカンマ数チェック（ユーザーには内部ロジックを見せない）
-        if (commaCount !== 7) {
+        // データが1列減ったため、カンマの数を6つ（7列データ）で判定
+        if (commaCount !== 6) {
             errorArea.textContent = "適切なフォーマットではありません";
             return;
         }
 
-        // 1行目のテキストで厳密判定（完全一致）
-        if (typeIndicator === '見積もり') {
-            btnEstimate.classList.add('active-estimate');
-        } else if (typeIndicator === '発注') {
-            btnOrder.classList.add('active-order');
-        } else {
-            errorArea.textContent = "適切なフォーマットではありません";
-        }
+        btnOrder.classList.add('active-order');
     });
 
     function resetUI() {
-        btnEstimate.classList.remove('active-estimate');
         btnOrder.classList.remove('active-order');
         errorArea.textContent = "";
     }
 
-    // 日付を2種類のフォーマットで取得する関数
     function getFormattedDate() {
         const today = new Date();
         const yyyy = today.getFullYear();
@@ -102,22 +85,24 @@
         const dd = String(today.getDate()).padStart(2, '0');
         
         return {
-            forCell: `${yyyy}/${mm}/${dd}`, // E2セル用 (YYYY/MM/DD)
-            forFile: `${yyyy}${mm}${dd}`    // ファイル名用 (YYYYMMDD)
+            forCell: `${yyyy}/${mm}/${dd}`,
+            forFile: `${yyyy}${mm}${dd}`
         };
     }
 
-    // Excel生成処理
-    async function generateExcel(type) {
-        const templateFile = type === 'estimate' ? 'estimate_template.xlsx' : 'order_template.xlsx';
+    async function generateExcel() {
+        const templateFile = 'order_template.xlsx';
         const text = getCleanText();
         const lines = text.split('\n');
         
-        // データの抽出
-        const addressee = lines[1].trim();
+        const addressee = lines[0].trim(); // 1行目が宛名（E1用）
+        const vendorRaw = lines[1].trim(); // 2行目が業者名（ファイル名用）
+        
+        // 業者名の末尾に「様」がなければ付与
+        const vendorName = vendorRaw.endsWith('様') ? vendorRaw : vendorRaw + '様';
+        
         const dateObj = getFormattedDate();
         
-        // 数値に変換できるものは数値（Number）として取り込む
         const data = lines.slice(2).map(row => {
             return row.split(',').map(cell => {
                 const trimmedCell = cell.trim();
@@ -126,7 +111,6 @@
         });
 
         try {
-            // 1. テンプレートの読み込み
             const response = await fetch(templateFile);
             if (!response.ok) throw new Error("テンプレートファイルが見つかりません。");
             const arrayBuffer = await response.arrayBuffer();
@@ -135,19 +119,15 @@
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
 
-            // 2. セルへの書き込み
             XLSX.utils.sheet_add_aoa(worksheet, [[addressee]], { origin: "E1" });
             XLSX.utils.sheet_add_aoa(worksheet, [[dateObj.forCell]], { origin: "E2" });
             XLSX.utils.sheet_add_aoa(worksheet, data, { origin: "A6" });
 
-            // 3. ファイル名の決定
-            const contentName = (type === 'estimate') ? 'お見積もり依頼' : '発注依頼';
-            const fileName = `十條合成様_${contentName}_${dateObj.forFile}.xlsx`;
+            // 業者名を使用した動的なファイル名
+            const fileName = `${vendorName}_発注依頼_${dateObj.forFile}.xlsx`;
 
-            // 4. ダウンロード実行
             XLSX.writeFile(workbook, fileName);
 
-            // 5. 後処理
             csvInput.value = "";
             resetUI();
             alert(`ファイル「${fileName}」を生成しました。`);
@@ -157,9 +137,7 @@
         }
     }
 
-    // ボタンにイベントを登録
-    btnEstimate.addEventListener('click', () => generateExcel('estimate'));
-    btnOrder.addEventListener('click', () => generateExcel('order'));
+    btnOrder.addEventListener('click', generateExcel);
 </script>
 
 </body>
