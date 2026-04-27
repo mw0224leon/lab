@@ -56,16 +56,16 @@
         
         resetUI();
 
-        // 3行（宛名、業者名、データ）必要
         if (lines.length < 3 || !text) {
             return;
         }
 
-        const firstDataLine = lines[2]; // 3行目がデータの1行目
-        const commaCount = (firstDataLine.match(/,/g) || []).length;
+        const firstDataLine = lines[2];
+        // カンマではなく「パイプ（|）」の数をカウントするように変更（正規表現を \| に変更）
+        const pipeCount = (firstDataLine.match(/\|/g) || []).length;
 
-        // データが1列減ったため、カンマの数を6つ（7列データ）で判定
-        if (commaCount !== 6) {
+        // パイプが6つ（7列データ）かどうか判定
+        if (pipeCount !== 6) {
             errorArea.textContent = "適切なフォーマットではありません";
             return;
         }
@@ -95,16 +95,15 @@
         const text = getCleanText();
         const lines = text.split('\n');
         
-        const addressee = lines[0].trim(); // 1行目が宛名（E1用）
-        const vendorRaw = lines[1].trim(); // 2行目が業者名（ファイル名用）
-        
-        // 業者名の末尾に「様」がなければ付与
+        const addressee = lines[0].trim();
+        const vendorRaw = lines[1].trim();
         const vendorName = vendorRaw.endsWith('様') ? vendorRaw : vendorRaw + '様';
         
         const dateObj = getFormattedDate();
         
         const data = lines.slice(2).map(row => {
-            return row.split(',').map(cell => {
+            // ここもカンマではなくパイプ（|）で分割するように変更
+            return row.split('|').map(cell => {
                 const trimmedCell = cell.trim();
                 return (trimmedCell !== "" && !isNaN(trimmedCell)) ? Number(trimmedCell) : trimmedCell;
             });
@@ -123,7 +122,6 @@
             XLSX.utils.sheet_add_aoa(worksheet, [[dateObj.forCell]], { origin: "E2" });
             XLSX.utils.sheet_add_aoa(worksheet, data, { origin: "A6" });
 
-            // 業者名を使用した動的なファイル名
             const fileName = `${vendorName}_発注依頼_${dateObj.forFile}.xlsx`;
 
             XLSX.writeFile(workbook, fileName);
